@@ -130,9 +130,10 @@ export default function App() {
   const [showForm, setShowForm]       = useState(false);
   const [detail, setDetail]           = useState(null);
   const [carDetail, setCarDetail]     = useState(null); // 차량 클릭 시 해당 날 예약 목록
-  const [form, setForm]               = useState({carId:"",date:TODAY,start:9,end:10,purpose:"",
-    name:localStorage.getItem("userName")||"",dept:localStorage.getItem("userDept")||""});
+  const [form, setForm]               = useState({carId:"",date:TODAY,start:9,end:10,purpose:""});
   const [toast, setToast]       = useState(null);
+  const [profile, setProfile]   = useState({name:localStorage.getItem("userName")||"",dept:localStorage.getItem("userDept")||""});
+  const [pEdit, setPEdit]       = useState({name:localStorage.getItem("userName")||"",dept:localStorage.getItem("userDept")||""});
 
   // 휴무 등록 폼
   const [hForm, setHForm] = useState({carId:"",date:""});
@@ -154,6 +155,14 @@ export default function App() {
 
   function showToast(msg,err) { setToast({msg,err}); setTimeout(()=>setToast(null),2400); }
 
+  function saveProfile() {
+    if(!pEdit.name||!pEdit.dept) return showToast("이름과 부서명을 입력해주세요",true);
+    localStorage.setItem("userName", pEdit.name);
+    localStorage.setItem("userDept", pEdit.dept);
+    setProfile({...pEdit});
+    showToast("내 정보가 저장됐어요");
+  }
+
   function go(dir) {
     if(view==="day") { const next=addD(anchor,dir); setAnchor(next); setSelDate(next); }
     if(view==="week")  setAnchor(a=>addD(a,dir*7));
@@ -163,14 +172,13 @@ export default function App() {
   function pickDate(date) { setSelDate(date); if(view!=="day"){setView("day");} setAnchor(date); }
 
   function submit() {
-    const {carId,date,start,end,purpose,name,dept}=form;
+    const {carId,date,start,end,purpose}=form;
+    const {name,dept}=profile;
     if(!carId||!date||!purpose||!name||!dept) return showToast("모든 항목을 입력해주세요",true);
     if(end<=start) return showToast("종료 시간을 시작 시간보다 늦게 설정해주세요",true);
     if(isCarHoliday(Number(carId),date)) return showToast("해당 차량의 휴무일이에요",true);
     if(hasConflict(reservations,Number(carId),date,start,end))
       return showToast("해당 시간에 이미 예약이 있어요",true);
-    localStorage.setItem("userName", name);
-    localStorage.setItem("userDept", dept);
     push(ref(db, "reservations"), {carId:Number(carId),date,
       start:Number(start),end:Number(end),purpose,user:name,dept});
     setShowForm(false); showToast("예약이 완료됐어요 🎉");
@@ -208,7 +216,7 @@ export default function App() {
 
   const CAR    = id => CARS.find(c=>c.id===id);
   const totalH = HOURS.length-1;
-  const myRes  = reservations.filter(r=>r.user===form.name);
+  const myRes  = reservations.filter(r=>r.user===profile.name);
 
   const weekDates  = useMemo(()=>getWeekDates(anchor),[anchor]);
   const monthDates = useMemo(()=>getMonthDates(anchor),[anchor]);
@@ -345,7 +353,7 @@ export default function App() {
                         return (
                           <div key={r.id}
                             style={{position:"absolute",top:3,bottom:3,left:`${left}%`,width:`${width}%`,
-                              background:r.user===form.name?car.color:car.color+"60",
+                              background:r.user===profile.name?car.color:car.color+"60",
                               borderRadius:4,minWidth:4}}/>
                         );
                       })}
@@ -415,7 +423,7 @@ export default function App() {
                         )}
                         {!isH&&cellRes.map(r=>(
                           <div key={r.id} onClick={e=>{e.stopPropagation();setDetail(r);}}
-                            style={{background:r.user===form.name?car.color:car.color+"55",
+                            style={{background:r.user===profile.name?car.color:car.color+"55",
                               borderRadius:3,padding:"2px 4px",marginBottom:2,cursor:"pointer"}}>
                             <div style={{fontSize:9,color:"#fff",fontWeight:700,whiteSpace:"nowrap",
                               overflow:"hidden",textOverflow:"ellipsis"}}>{r.start}~{r.end}시</div>
@@ -446,7 +454,7 @@ export default function App() {
                   const isToday=dateStr===TODAY, isSel=dateStr===selDate;
                   const hCars=holidays.filter(h=>h.date===dateStr);
                   const di=idx%7;
-                  const myDayR=dayR.filter(r=>r.user===form.name);
+                  const myDayR=dayR.filter(r=>r.user===profile.name);
                   return (
                     <div key={dateStr+idx} onClick={()=>inMonth&&pickDate(dateStr)}
                       style={{minHeight:60,padding:"4px",
@@ -472,7 +480,7 @@ export default function App() {
                         const show=dayR.slice(0,2), more=dayR.length-show.length;
                         return (<>
                           {show.map(r=>{const car=CAR(r.carId);return(
-                            <div key={r.id} style={{background:r.user===form.name?car.color:car.color+"55",
+                            <div key={r.id} style={{background:r.user===profile.name?car.color:car.color+"55",
                               borderRadius:3,padding:"1px 3px",marginBottom:1}}>
                               <div style={{fontSize:8,color:"#fff",fontWeight:600,whiteSpace:"nowrap",
                                 overflow:"hidden",textOverflow:"ellipsis"}}>{car.plate}</div>
@@ -504,7 +512,7 @@ export default function App() {
                   <button key={r.id} onClick={()=>setDetail(r)} style={{
                     display:"flex",alignItems:"center",gap:10,width:"100%",
                     padding:"10px 16px",border:"none",borderTop:"1px solid #f3f4f6",
-                    background:r.user===form.name?car.color+"08":"#fafafa",cursor:"pointer",textAlign:"left"}}>
+                    background:r.user===profile.name?car.color+"08":"#fafafa",cursor:"pointer",textAlign:"left"}}>
                     <div style={{width:8,height:8,borderRadius:"50%",background:car.color,flexShrink:0}}/>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:600,color:"#111827"}}>
@@ -512,7 +520,7 @@ export default function App() {
                         <span style={{fontWeight:400,color:"#9ca3af"}}> · {r.purpose}</span>
                       </div>
                     </div>
-                    {r.user===form.name&&<span style={{fontSize:11,color:car.color,fontWeight:700}}>나</span>}
+                    {r.user===profile.name&&<span style={{fontSize:11,color:car.color,fontWeight:700}}>나</span>}
                     <span style={{fontSize:11,color:"#d1d5db"}}>›</span>
                   </button>
                 );})}
@@ -570,8 +578,36 @@ export default function App() {
 
         {/* ══ 설정 탭 ══ */}
         {tab==="settings"&&(<>
-          <div style={{fontWeight:700,fontSize:16,color:"#111827",marginBottom:4}}>설정</div>
-          <div style={{fontSize:13,color:"#9ca3af",marginBottom:20}}>
+          <div style={{fontWeight:700,fontSize:16,color:"#111827",marginBottom:14}}>설정</div>
+
+          {/* 내 정보 카드 */}
+          <div style={{background:"#fff",borderRadius:14,padding:16,marginBottom:14}}>
+            <div style={{fontWeight:700,fontSize:14,color:"#111827",marginBottom:14}}>👤 내 정보</div>
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <Fl label="부서명">
+                  <input value={pEdit.dept} onChange={e=>setPEdit(p=>({...p,dept:e.target.value}))}
+                    placeholder="예: 개발팀" style={inp}/>
+                </Fl>
+                <Fl label="성명">
+                  <input value={pEdit.name} onChange={e=>setPEdit(p=>({...p,name:e.target.value}))}
+                    placeholder="예: 홍길동" style={inp}/>
+                </Fl>
+              </div>
+              {profile.name&&(
+                <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,
+                  padding:"10px 14px",fontSize:13,color:"#1e40af"}}>
+                  현재 등록: <strong>{profile.dept} · {profile.name}</strong>
+                </div>
+              )}
+              <button onClick={saveProfile} style={{width:"100%",padding:13,border:"none",
+                borderRadius:10,background:"#2563eb",color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}>
+                저장
+              </button>
+            </div>
+          </div>
+
+          <div style={{fontSize:13,color:"#9ca3af",marginBottom:14}}>
             차량별 휴무 날짜를 등록하면 해당 날짜에 예약 버튼이 비활성화됩니다.
           </div>
 
@@ -693,7 +729,7 @@ export default function App() {
 
       {/* 예약 신청 시트 */}
       <Sheet open={showForm} onClose={()=>setShowForm(false)} title="🗓 차량 예약"
-        cta="예약 확정" onCta={submit} ctaDisabled={!!conflict||!!formCarHoliday}>
+        cta="예약 확정" onCta={submit} ctaDisabled={!!conflict||!!formCarHoliday||!profile.name||!profile.dept}>
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <Fl label="차량 선택">
             <select value={form.carId} onChange={e=>fv("carId",e.target.value)} style={inp}>
@@ -735,16 +771,23 @@ export default function App() {
               ✅ {form.start}:00 ~ {form.end}:00 ({form.end-form.start}시간) 예약 가능
             </div>
           ) : null}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <Fl label="부서명">
-              <input value={form.dept} onChange={e=>fv("dept",e.target.value)}
-                placeholder="예: 개발팀" style={inp}/>
-            </Fl>
-            <Fl label="이름">
-              <input value={form.name} onChange={e=>fv("name",e.target.value)}
-                placeholder="예: 홍길동" style={inp}/>
-            </Fl>
-          </div>
+          {profile.name && profile.dept ? (
+            <div style={{display:"flex",alignItems:"center",background:"#f0fdf4",
+              border:"1px solid #bbf7d0",borderRadius:10,padding:"12px 14px",gap:10}}>
+              <span style={{fontSize:18}}>👤</span>
+              <div>
+                <div style={{fontSize:11,color:"#15803d",fontWeight:600}}>예약자 (설정에서 변경)</div>
+                <div style={{fontSize:14,fontWeight:700,color:"#111827",marginTop:2}}>
+                  {profile.dept} · {profile.name}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:10,
+              padding:"12px 14px",fontSize:13,color:"#991b1b",fontWeight:600}}>
+              ⚠️ 설정 탭에서 부서명과 이름을 먼저 등록해주세요.
+            </div>
+          )}
           <Fl label="사용 목적">
             <input value={form.purpose} onChange={e=>fv("purpose",e.target.value)}
               placeholder="예: 거래처 방문, 공항 픽업" style={inp}/>
@@ -800,8 +843,8 @@ export default function App() {
               {!isHoliday && blocks.map((r,i)=>(
                 <div key={r.id} style={{
                   borderRadius:12,padding:"14px",marginBottom:8,
-                  background:r.user===form.name?car.color+"0d":"#f8fafc",
-                  border:`1px solid ${r.user===form.name?car.color+"30":"#f1f5f9"}`}}>
+                  background:r.user===profile.name?car.color+"0d":"#f8fafc",
+                  border:`1px solid ${r.user===profile.name?car.color+"30":"#f1f5f9"}`}}>
                   {/* 시간 바 */}
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                     <div style={{width:4,height:32,borderRadius:2,background:car.color,flexShrink:0}}/>
@@ -812,7 +855,7 @@ export default function App() {
                       </div>
                       <div style={{fontSize:12,color:"#6b7280",marginTop:2}}>{r.purpose}</div>
                     </div>
-                    {r.user===form.name && (
+                    {r.user===profile.name && (
                       <span style={{marginLeft:"auto",fontSize:11,color:car.color,fontWeight:700,
                         background:car.color+"18",padding:"3px 8px",borderRadius:20}}>내 예약</span>
                     )}
@@ -822,7 +865,7 @@ export default function App() {
                     <Avatar name={r.user} color={car.color} size={26}/>
                     <span style={{fontSize:13,color:"#374151",fontWeight:600}}>{r.user}</span>
                     <span style={{fontSize:12,color:"#9ca3af"}}>({r.dept})</span>
-                    {r.user===form.name && (
+                    {r.user===profile.name && (
                       <button onClick={()=>{cancel(r.id);setCarDetail(null);}}
                         style={{marginLeft:"auto",background:"none",border:"1px solid #fecaca",
                           borderRadius:8,padding:"3px 10px",fontSize:11,color:"#ef4444",cursor:"pointer"}}>
@@ -839,7 +882,7 @@ export default function App() {
 
       {/* 예약 상세 시트 */}
       <Sheet open={!!detail} onClose={()=>setDetail(null)} title="예약 상세"
-        cta={detail?.user===form.name?"예약 취소":null}
+        cta={detail?.user===profile.name?"예약 취소":null}
         onCta={()=>cancel(detail?.id)} ctaColor="#ef4444">
         {detail&&(()=>{const car=CAR(detail.carId);return(
           <div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -859,7 +902,7 @@ export default function App() {
                 <div style={{fontSize:14,fontWeight:700,color:"#111827"}}>{detail.user}</div>
                 <div style={{fontSize:12,color:"#9ca3af",marginTop:2}}>{detail.dept}</div>
               </div>
-              {detail.user===form.name&&(
+              {detail.user===profile.name&&(
                 <span style={{marginLeft:"auto",fontSize:12,color:car.color,fontWeight:700}}>내 예약</span>
               )}
             </div>
