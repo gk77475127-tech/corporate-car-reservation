@@ -360,7 +360,7 @@ export default function App() {
               );
             })}
             </div>
-            <button onClick={()=>{setForm({carId:"",date:selDate,start:9,end:10,purpose:""});setShowForm(true);}}
+            <button onClick={()=>{setForm(p=>({...p,carId:"",date:selDate,start:9,end:10,purpose:""}));setShowForm(true);}}
               style={{position:"fixed",bottom:84,right:20,zIndex:200,
                 width:56,height:56,borderRadius:"50%",background:"#2563eb",color:"#fff",
                 border:"none",fontSize:26,cursor:"pointer",boxShadow:"0 4px 16px rgba(37,99,235,0.4)"}}>+</button>
