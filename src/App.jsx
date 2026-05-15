@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
+import { db } from "./firebase";
+import { ref, onValue, push, remove } from "firebase/database";
 
 const CARS = [
   { id: 1, name: "아이오닉5",   plate: "50너8219",  type: "SUV",  seats: 5, color: "#2563eb" },
@@ -18,7 +20,6 @@ function CarLabel({ car, size = "md" }) {
   );
 }
 
-const ME = { name: "홍길동", dept: "개발팀" };
 const WEEK_DAYS = ["월","화","수","목","금","토","일"];
 const HOURS = Array.from({ length: 11 }, (_, i) => i + 8);
 
@@ -124,23 +125,29 @@ export default function App() {
   const [view, setView]         = useState("day");
   const [anchor, setAnchor]     = useState(TODAY);
   const [selDate, setSelDate]   = useState(TODAY);
-  const [reservations, setRes]  = useState(() => {
-    try { return JSON.parse(localStorage.getItem("reservations")) || []; } catch { return []; }
-  });
-  const [holidays, setHolidays] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("holidays")) || []; } catch { return []; }
-  });
+  const [reservations, setRes]  = useState([]);
+  const [holidays, setHolidays] = useState([]);
   const [showForm, setShowForm]       = useState(false);
   const [detail, setDetail]           = useState(null);
   const [carDetail, setCarDetail]     = useState(null); // 차량 클릭 시 해당 날 예약 목록
-  const [form, setForm]               = useState({carId:"",date:TODAY,start:9,end:10,purpose:""});
+  const [form, setForm]               = useState({carId:"",date:TODAY,start:9,end:10,purpose:"",
+    name:localStorage.getItem("userName")||"",dept:localStorage.getItem("userDept")||""});
   const [toast, setToast]       = useState(null);
 
   // 휴무 등록 폼
   const [hForm, setHForm] = useState({carId:"",date:""});
 
-  useEffect(() => { localStorage.setItem("reservations", JSON.stringify(reservations)); }, [reservations]);
-  useEffect(() => { localStorage.setItem("holidays", JSON.stringify(holidays)); }, [holidays]);
+  useEffect(() => {
+    const unsub1 = onValue(ref(db, "reservations"), snap => {
+      const val = snap.val();
+      setRes(val ? Object.entries(val).map(([id, v]) => ({...v, id})) : []);
+    });
+    const unsub2 = onValue(ref(db, "holidays"), snap => {
+      const val = snap.val();
+      setHolidays(val ? Object.entries(val).map(([id, v]) => ({...v, id})) : []);
+    });
+    return () => { unsub1(); unsub2(); };
+  }, []);
 
   const fv  = (k,v) => setForm(p=>({...p,[k]:v}));
   const hfv = (k,v) => setHForm(p=>({...p,[k]:v}));
@@ -156,19 +163,21 @@ export default function App() {
   function pickDate(date) { setSelDate(date); if(view!=="day"){setView("day");} setAnchor(date); }
 
   function submit() {
-    const {carId,date,start,end,purpose}=form;
-    if(!carId||!date||!purpose) return showToast("모든 항목을 입력해주세요",true);
+    const {carId,date,start,end,purpose,name,dept}=form;
+    if(!carId||!date||!purpose||!name||!dept) return showToast("모든 항목을 입력해주세요",true);
     if(end<=start) return showToast("종료 시간을 시작 시간보다 늦게 설정해주세요",true);
     if(isCarHoliday(Number(carId),date)) return showToast("해당 차량의 휴무일이에요",true);
     if(hasConflict(reservations,Number(carId),date,start,end))
       return showToast("해당 시간에 이미 예약이 있어요",true);
-    setRes(r=>[...r,{id:Date.now(),carId:Number(carId),date,
-      start:Number(start),end:Number(end),purpose,user:ME.name,dept:ME.dept}]);
+    localStorage.setItem("userName", name);
+    localStorage.setItem("userDept", dept);
+    push(ref(db, "reservations"), {carId:Number(carId),date,
+      start:Number(start),end:Number(end),purpose,user:name,dept});
     setShowForm(false); showToast("예약이 완료됐어요 🎉");
   }
 
   function cancel(id) {
-    setRes(r=>r.filter(x=>x.id!==id)); setDetail(null); showToast("예약이 취소됐어요");
+    remove(ref(db, `reservations/${id}`)); setDetail(null); showToast("예약이 취소됐어요");
   }
 
   // 휴무 등록
@@ -177,13 +186,13 @@ export default function App() {
     const exists = holidays.some(h=>h.carId===Number(hForm.carId)&&h.date===hForm.date);
     if(exists) return showToast("이미 등록된 휴무예요",true);
     const car = CARS.find(c=>c.id===Number(hForm.carId));
-    setHolidays(h=>[...h,{id:"h"+Date.now(),carId:Number(hForm.carId),date:hForm.date}]);
+    push(ref(db, "holidays"), {carId:Number(hForm.carId),date:hForm.date});
     setHForm({carId:"",date:""});
     showToast(`${car.name} ${hForm.date} 휴무 등록 완료`);
   }
 
   function removeHoliday(id) {
-    setHolidays(h=>h.filter(x=>x.id!==id));
+    remove(ref(db, `holidays/${id}`));
     showToast("휴무가 삭제됐어요");
   }
 
@@ -199,7 +208,7 @@ export default function App() {
 
   const CAR    = id => CARS.find(c=>c.id===id);
   const totalH = HOURS.length-1;
-  const myRes  = reservations.filter(r=>r.user===ME.name);
+  const myRes  = reservations.filter(r=>r.user===form.name);
 
   const weekDates  = useMemo(()=>getWeekDates(anchor),[anchor]);
   const monthDates = useMemo(()=>getMonthDates(anchor),[anchor]);
@@ -336,7 +345,7 @@ export default function App() {
                         return (
                           <div key={r.id}
                             style={{position:"absolute",top:3,bottom:3,left:`${left}%`,width:`${width}%`,
-                              background:r.user===ME.name?car.color:car.color+"60",
+                              background:r.user===form.name?car.color:car.color+"60",
                               borderRadius:4,minWidth:4}}/>
                         );
                       })}
@@ -406,7 +415,7 @@ export default function App() {
                         )}
                         {!isH&&cellRes.map(r=>(
                           <div key={r.id} onClick={e=>{e.stopPropagation();setDetail(r);}}
-                            style={{background:r.user===ME.name?car.color:car.color+"55",
+                            style={{background:r.user===form.name?car.color:car.color+"55",
                               borderRadius:3,padding:"2px 4px",marginBottom:2,cursor:"pointer"}}>
                             <div style={{fontSize:9,color:"#fff",fontWeight:700,whiteSpace:"nowrap",
                               overflow:"hidden",textOverflow:"ellipsis"}}>{r.start}~{r.end}시</div>
@@ -437,7 +446,7 @@ export default function App() {
                   const isToday=dateStr===TODAY, isSel=dateStr===selDate;
                   const hCars=holidays.filter(h=>h.date===dateStr);
                   const di=idx%7;
-                  const myDayR=dayR.filter(r=>r.user===ME.name);
+                  const myDayR=dayR.filter(r=>r.user===form.name);
                   return (
                     <div key={dateStr+idx} onClick={()=>inMonth&&pickDate(dateStr)}
                       style={{minHeight:60,padding:"4px",
@@ -463,7 +472,7 @@ export default function App() {
                         const show=dayR.slice(0,2), more=dayR.length-show.length;
                         return (<>
                           {show.map(r=>{const car=CAR(r.carId);return(
-                            <div key={r.id} style={{background:r.user===ME.name?car.color:car.color+"55",
+                            <div key={r.id} style={{background:r.user===form.name?car.color:car.color+"55",
                               borderRadius:3,padding:"1px 3px",marginBottom:1}}>
                               <div style={{fontSize:8,color:"#fff",fontWeight:600,whiteSpace:"nowrap",
                                 overflow:"hidden",textOverflow:"ellipsis"}}>{car.name.slice(0,4)}</div>
@@ -495,7 +504,7 @@ export default function App() {
                   <button key={r.id} onClick={()=>setDetail(r)} style={{
                     display:"flex",alignItems:"center",gap:10,width:"100%",
                     padding:"10px 16px",border:"none",borderTop:"1px solid #f3f4f6",
-                    background:r.user===ME.name?car.color+"08":"#fafafa",cursor:"pointer",textAlign:"left"}}>
+                    background:r.user===form.name?car.color+"08":"#fafafa",cursor:"pointer",textAlign:"left"}}>
                     <div style={{width:8,height:8,borderRadius:"50%",background:car.color,flexShrink:0}}/>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:600,color:"#111827"}}>
@@ -503,7 +512,7 @@ export default function App() {
                         <span style={{fontWeight:400,color:"#9ca3af"}}> · {r.purpose}</span>
                       </div>
                     </div>
-                    {r.user===ME.name&&<span style={{fontSize:11,color:car.color,fontWeight:700}}>나</span>}
+                    {r.user===form.name&&<span style={{fontSize:11,color:car.color,fontWeight:700}}>나</span>}
                     <span style={{fontSize:11,color:"#d1d5db"}}>›</span>
                   </button>
                 );})}
@@ -726,6 +735,16 @@ export default function App() {
               ✅ {form.start}:00 ~ {form.end}:00 ({form.end-form.start}시간) 예약 가능
             </div>
           ) : null}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Fl label="부서명">
+              <input value={form.dept} onChange={e=>fv("dept",e.target.value)}
+                placeholder="예: 개발팀" style={inp}/>
+            </Fl>
+            <Fl label="이름">
+              <input value={form.name} onChange={e=>fv("name",e.target.value)}
+                placeholder="예: 홍길동" style={inp}/>
+            </Fl>
+          </div>
           <Fl label="사용 목적">
             <input value={form.purpose} onChange={e=>fv("purpose",e.target.value)}
               placeholder="예: 거래처 방문, 공항 픽업" style={inp}/>
@@ -781,8 +800,8 @@ export default function App() {
               {!isHoliday && blocks.map((r,i)=>(
                 <div key={r.id} style={{
                   borderRadius:12,padding:"14px",marginBottom:8,
-                  background:r.user===ME.name?car.color+"0d":"#f8fafc",
-                  border:`1px solid ${r.user===ME.name?car.color+"30":"#f1f5f9"}`}}>
+                  background:r.user===form.name?car.color+"0d":"#f8fafc",
+                  border:`1px solid ${r.user===form.name?car.color+"30":"#f1f5f9"}`}}>
                   {/* 시간 바 */}
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                     <div style={{width:4,height:32,borderRadius:2,background:car.color,flexShrink:0}}/>
@@ -793,7 +812,7 @@ export default function App() {
                       </div>
                       <div style={{fontSize:12,color:"#6b7280",marginTop:2}}>{r.purpose}</div>
                     </div>
-                    {r.user===ME.name && (
+                    {r.user===form.name && (
                       <span style={{marginLeft:"auto",fontSize:11,color:car.color,fontWeight:700,
                         background:car.color+"18",padding:"3px 8px",borderRadius:20}}>내 예약</span>
                     )}
@@ -803,7 +822,7 @@ export default function App() {
                     <Avatar name={r.user} color={car.color} size={26}/>
                     <span style={{fontSize:13,color:"#374151",fontWeight:600}}>{r.user}</span>
                     <span style={{fontSize:12,color:"#9ca3af"}}>({r.dept})</span>
-                    {r.user===ME.name && (
+                    {r.user===form.name && (
                       <button onClick={()=>{cancel(r.id);setCarDetail(null);}}
                         style={{marginLeft:"auto",background:"none",border:"1px solid #fecaca",
                           borderRadius:8,padding:"3px 10px",fontSize:11,color:"#ef4444",cursor:"pointer"}}>
@@ -820,7 +839,7 @@ export default function App() {
 
       {/* 예약 상세 시트 */}
       <Sheet open={!!detail} onClose={()=>setDetail(null)} title="예약 상세"
-        cta={detail?.user===ME.name?"예약 취소":null}
+        cta={detail?.user===form.name?"예약 취소":null}
         onCta={()=>cancel(detail?.id)} ctaColor="#ef4444">
         {detail&&(()=>{const car=CAR(detail.carId);return(
           <div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -840,7 +859,7 @@ export default function App() {
                 <div style={{fontSize:14,fontWeight:700,color:"#111827"}}>{detail.user}</div>
                 <div style={{fontSize:12,color:"#9ca3af",marginTop:2}}>{detail.dept}</div>
               </div>
-              {detail.user===ME.name&&(
+              {detail.user===form.name&&(
                 <span style={{marginLeft:"auto",fontSize:12,color:car.color,fontWeight:700}}>내 예약</span>
               )}
             </div>
