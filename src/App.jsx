@@ -155,7 +155,7 @@ export default function App() {
   function showToast(msg,err) { setToast({msg,err}); setTimeout(()=>setToast(null),2400); }
 
   function go(dir) {
-    if(view==="day")   setAnchor(a=>addD(a,dir));
+    if(view==="day") { const next=addD(anchor,dir); setAnchor(next); setSelDate(next); }
     if(view==="week")  setAnchor(a=>addD(a,dir*7));
     if(view==="month") { const d=new Date(anchor); d.setMonth(d.getMonth()+dir); setAnchor(fmt(d)); }
   }
@@ -398,7 +398,7 @@ export default function App() {
                     justifyContent:"center",borderRight:"1px solid #f3f4f6"}}>
                     <div style={{width:7,height:7,borderRadius:"50%",background:car.color,marginBottom:3}}/>
                     <div style={{fontSize:10,fontWeight:700,color:"#374151",lineHeight:1.3}}>
-                      {car.name.slice(0,4)}<br/>{car.name.slice(4)}
+                      {car.plate.slice(0,4)}<br/>{car.plate.slice(4)}
                     </div>
                   </div>
                   {weekDates.map((date,di)=>{
@@ -475,7 +475,7 @@ export default function App() {
                             <div key={r.id} style={{background:r.user===form.name?car.color:car.color+"55",
                               borderRadius:3,padding:"1px 3px",marginBottom:1}}>
                               <div style={{fontSize:8,color:"#fff",fontWeight:600,whiteSpace:"nowrap",
-                                overflow:"hidden",textOverflow:"ellipsis"}}>{car.name.slice(0,4)}</div>
+                                overflow:"hidden",textOverflow:"ellipsis"}}>{car.plate}</div>
                             </div>
                           );})}
                           {more>0&&<div style={{fontSize:8,color:"#9ca3af",fontWeight:600}}>+{more}건</div>}
